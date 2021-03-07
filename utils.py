@@ -3,6 +3,7 @@ from selenium.webdriver.chrome.options import Options
 from browsermobproxy import Server
 import os, requests
 from time import sleep
+import fitz
 
 DEVIDER = '$$$$$$$$$$$$$$$$'
 
@@ -20,6 +21,7 @@ HEADERS = {
 }
 
 SLEEP_TIME = 2
+
 
 def get_book_info(USERID, PASSWORD, BOOKID):
     chrome_options = Options()
@@ -44,7 +46,8 @@ def get_book_info(USERID, PASSWORD, BOOKID):
     browser.get('http://reserves.lib.tsinghua.edu.cn/Search/BookDetail?bookId={}'.format(BOOKID))
     sleep(SLEEP_TIME)
     book_info = {}
-    book_info['title'] = browser.find_element_by_xpath('/html/body/div/div[4]/div[2]/div[2]/table/tbody/tr[1]/td[2]/font/b').text
+    book_info['title'] = browser.find_element_by_xpath(
+        '/html/body/div/div[4]/div[2]/div[2]/table/tbody/tr[1]/td[2]/font/b').text
     contents = browser.find_element_by_xpath('/html/body/div/div[4]/div[2]/div[2]/p[2]')
     links = contents.find_elements_by_tag_name('a')
     book_info['chapters'] = [link.text.replace('/', '_').replace('\\', '_') for link in links]
@@ -56,6 +59,7 @@ def get_book_info(USERID, PASSWORD, BOOKID):
 
     return book_info
 
+
 def prepareFolders(bookInfo: dict):
     if not os.path.isdir('./result'):
         os.mkdir('./result')
@@ -64,11 +68,12 @@ def prepareFolders(bookInfo: dict):
         if not os.path.isdir(folder):
             os.mkdir(folder)
 
+
 def get_chapter_info(link):
     server = Server(r'.\browsermob-proxy-2.1.4\bin\browsermob-proxy.bat')
     server.start()
     proxy = server.create_proxy()
-    
+
     chrome_options = Options()
     chrome_options.add_argument('--headless --proxy-server={0}'.format(proxy.proxy))
     browser = webdriver.Chrome(chrome_options=chrome_options)
@@ -89,15 +94,35 @@ def get_chapter_info(link):
     server.stop()
     return page, res_url
 
+
 def downloadChapter(page: int, url: str, chapter: str):
     for i in range(1, int(page) + 1):
-        realurl = url.format(i)
+        realUrl = url.format(i)
         print(chapter + ' ' + str(i))
         picFile = './result./{}/{}.jpg'.format(chapter, i)
         if os.path.isfile(picFile):
             continue
-        pic = requests.get(realurl, headers=HEADERS, timeout=50)
+        pic = requests.get(realUrl, headers=HEADERS, timeout=50)
         fp2 = open(picFile, 'wb')
         fp2.write(pic.content)
         fp2.close()
         sleep(2)
+
+
+def generatePdf(chapterList, book: str):
+    fileList = []
+    pdf = fitz.open()
+    bookFile = "./result/{}.pdf".format(book.replace("/", "_"))
+    for chapter in chapterList:
+        pngFiles = os.listdir("./result/{}/".format(chapter.replace("/", "_")))
+        pngFiles.sort()
+        pngFiles = ["./result/{}/{}".format(chapter.replace("/", "_"), png) for png in pngFiles]
+        fileList += pngFiles
+    for picFile in fileList:
+        png = fitz.open(picFile).convertToPDF()
+        pngPdf = fitz.open("pdf", png)
+        pdf.insertPDF(pngPdf)
+    if os.path.exists(bookFile):
+        os.remove(bookFile)
+    pdf.save(bookFile)
+    pdf.close()

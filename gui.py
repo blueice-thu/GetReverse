@@ -1,9 +1,10 @@
 from PyQt5.QtWidgets import QApplication, QMainWindow, QDesktopWidget
 from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
-import sys, os, requests
+import sys
 
 from style import Ui_MainWindow
-from utils import get_book_info, prepareFolders, get_chapter_info, downloadChapter
+from utils import get_book_info, prepareFolders, get_chapter_info, downloadChapter, generatePdf
+
 
 class GetInfoThread(QObject):
     overSignal = pyqtSignal(dict)
@@ -12,7 +13,7 @@ class GetInfoThread(QObject):
         super().__init__(parent=parent)
 
     @pyqtSlot(str, str, str)
-    def startGetInfo(self, USERID, PASSWORD, BOOKID):        
+    def startGetInfo(self, USERID, PASSWORD, BOOKID):
         try:
             result = get_book_info(USERID, PASSWORD, BOOKID)
             self.overSignal.emit(result)
@@ -21,12 +22,13 @@ class GetInfoThread(QObject):
                 print(str(ex))
             self.overSignal.emit({})
 
+
 class DownloadThread(QObject):
     overSignal = pyqtSignal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
-    
+
     @pyqtSlot(dict)
     def startDownload(self, bookInfo):
         prepareFolders(bookInfo)
@@ -35,11 +37,13 @@ class DownloadThread(QObject):
                 page, url = get_chapter_info(link)
                 url = url.replace(r'1.', r'{}.')
                 downloadChapter(page, url, chapter)
+            generatePdf(bookInfo['chapters'], bookInfo['title'])
             self.overSignal.emit(True)
         except Exception as ex:
             if True:
                 print(str(ex))
             self.overSignal.emit(False)
+
 
 class MainWindow(QMainWindow, Ui_MainWindow):
     getInfoSignal = pyqtSignal(str, str, str)
@@ -67,7 +71,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.downloadThread.start()
 
         self.bookInfo = None
-    
+
     def checkInput(self):
         if self.inputUserid.text() == '' \
                 or self.inputPassword.text() == '' \
@@ -76,7 +80,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.labelStatus.setText('输入错误！')
             return False
         return True
-    
+
     def buttonGetInfoClicked(self):
         if not self.checkInput():
             return
@@ -93,7 +97,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.buttonDownload.setEnabled(False)
         self.labelStatus.setText('正在下载……')
         self.downloadSignal.emit(self.bookInfo)
-    
+
     @pyqtSlot(dict)
     def overGetInfo(self, result):
         if not result:
@@ -107,7 +111,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.labelBookInfo.setText(infoText)
         self.buttonGetInfo.setEnabled(True)
         self.buttonDownload.setEnabled(True)
-    
+
     @pyqtSlot(bool)
     def overDownload(self, result):
         if not result:
@@ -116,7 +120,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.labelStatus.setText('下载成功！')
         self.buttonGetInfo.setEnabled(True)
         self.buttonDownload.setEnabled(True)
-    
+
     def _moveCenter(self):
         qr = self.frameGeometry()
         cp = QDesktopWidget().availableGeometry().center()
